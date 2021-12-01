@@ -1,76 +1,96 @@
 extern crate byteorder;
 
-use byteorder::{ByteOrder, BigEndian, LittleEndian};
-use std::io::{Read, Write, Result, Error, ErrorKind};
+use byteorder::{ByteOrder, BigEndian};
+use std::{io::{Read, Write, Result}, convert::TryInto};
 
-/// An enum to represent the byte order of the ByteBuffer object
-#[derive(Debug, Clone, Copy)]
-pub enum Endian{
-    BigEndian,
-    LittleEndian,
-}
+/// THIS FILE HAS BEEN MODIFIED HEAVILY BY Ceikry IN ORDER TO ACCOMODATE ADDITIONAL FEATURES, AND SEPARATE NAMING BASED ON PERSONAL PREFERENCE.
+/// Much love to the original authors who provided the groundwork <3 (Such authors are mentioned in the attributions in cargo.toml)
 
-/// A byte buffer object specifically turned to easily read and write binary values
-pub struct ByteBuffer {
+/// A data buffer object specifically turned to easily read and write binary values
+pub struct DataBuffer {
     data: Vec<u8>,
     wpos: usize,
     rpos: usize,
     rbit: usize,
     wbit: usize,
-    endian: Endian,
+    header: PacketHeader
 }
 
-macro_rules! read_number {
-    ($self:ident, $name:ident, $offset:expr) => {
-        {
-            $self.flush_bit();
-            if $self.rpos + $offset > $self.data.len() {
-                return Err(Error::new(ErrorKind::UnexpectedEof, "could not read enough bits from buffer"))
-            }
-            let range = $self.rpos..$self.rpos + $offset;
-            $self.rpos += $offset;
-
-            Ok(match $self.endian{
-                Endian::BigEndian => BigEndian::$name(&$self.data[range]),
-                Endian::LittleEndian => LittleEndian::$name(&$self.data[range]),
-            })
-        }
-    }
+pub enum PacketHeader {
+    NORMAL,
+    SHORT,
+    BYTE
 }
 
-impl Default for ByteBuffer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ByteBuffer {
-    /// Construct a new, empty, ByteBuffer
-    pub fn new() -> ByteBuffer {
-        ByteBuffer {
+impl DataBuffer {
+    /// Construct a new, empty, DataBuffer
+    pub fn new() -> DataBuffer {
+        DataBuffer {
             data: vec![],
             wpos: 0,
             rpos: 0,
             rbit: 0,
             wbit: 0,
-            endian: Endian::BigEndian,       
+            header: PacketHeader::NORMAL
         }
     }
 
-    /// Construct a new ByteBuffer filled with the data array.
-    pub fn from_bytes(bytes: &[u8]) -> ByteBuffer {
-        let mut buffer = ByteBuffer::new();
+    /// Construct a new DataBuffer filled with the data array.
+    pub fn from_bytes(bytes: &[u8]) -> DataBuffer {
+        let mut buffer = DataBuffer::new();
         buffer.write_bytes(bytes);
         buffer
+    }
+
+    pub fn create(opcode: u8, header: PacketHeader) -> DataBuffer {
+        let mut buff = DataBuffer::new();
+        buff.write_u8(opcode);
+
+        match header {
+            PacketHeader::NORMAL => {},
+            PacketHeader::BYTE => {
+                buff.write_u8(255);
+            }
+            PacketHeader::SHORT => {
+                buff.write_u16(65535);
+            }
+        }
+
+        buff.header = header;
+
+        buff
+    }
+
+    pub fn finish(&mut self){
+        let mut size = self.get_wpos();
+
+        self.set_wpos(1);
+        self.set_rpos(1);
+
+        let header_bytes = match self.header {
+            PacketHeader::NORMAL => 0,
+            PacketHeader::BYTE => 1,
+            PacketHeader::SHORT => 2
+        };
+
+        size = ((size as u8) - header_bytes - 1).try_into().unwrap();
+
+        match self.header {
+            PacketHeader::NORMAL => {},
+            PacketHeader::BYTE => {
+                self.write_u8(size.try_into().unwrap());
+            }
+            PacketHeader::SHORT => {
+                self.write_u16(size.try_into().unwrap());
+            }
+        }
+
+        self.set_rpos(0);
     }
 
     /// Return the buffer size
     pub fn len(&self) -> usize {
         self.data.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
     }
 
     /// Clear the buffer and reinitialize the reading and writing cursor
@@ -90,28 +110,15 @@ impl ByteBuffer {
         }
     }
 
-    /// Set the byte order of the buffer
-    ///
-    /// _Note_: By default the buffer uses big endian order
-    pub fn set_endian(&mut self, endian: Endian) {
-        self.endian = endian;
-    }
-
-    /// Returns the current byte order of the buffer
-    pub fn endian(&self) -> Endian {
-        self.endian
-    }
-
     // Write operations
 
     /// Append a byte array to the buffer. The buffer is automatically extended if needed
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// # use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// # use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_bytes(&vec![0x1, 0xFF, 0x45]); // buffer contains [0x1, 0xFF, 0x45]
     /// ```
     pub fn write_bytes(&mut self, bytes: &[u8]) {
@@ -130,13 +137,12 @@ impl ByteBuffer {
     }
 
     /// Append a byte (8 bits value) to the buffer
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_u8(1) // buffer contains [0x1]
     /// ```
     pub fn write_u8(&mut self, val: u8) {
@@ -144,275 +150,297 @@ impl ByteBuffer {
     }
 
     /// Same as `write_u8()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     pub fn write_i8(&mut self, val: i8) {
         self.write_u8(val as u8);
     }
 
     /// Append a word (16 bits value) to the buffer
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_u16(1) // buffer contains [0x00, 0x1] if little endian
     /// ```
     pub fn write_u16(&mut self, val: u16) {
         let mut buf = [0; 2];
-        
-        match self.endian{
-            Endian::BigEndian => BigEndian::write_u16(&mut buf, val),
-            Endian::LittleEndian => LittleEndian::write_u16(&mut buf, val),
-        };
-
+        BigEndian::write_u16(&mut buf, val);
         self.write_bytes(&buf);
     }
 
     /// Same as `write_u16()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     pub fn write_i16(&mut self, val: i16) {
         self.write_u16(val as u16);
     }
 
     /// Append a double word (32 bits value) to the buffer
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_u32(1) // buffer contains [0x00, 0x00, 0x00, 0x1] if little endian
     /// ```
     pub fn write_u32(&mut self, val: u32) {
         let mut buf = [0; 4];
-        
-        match self.endian{
-            Endian::BigEndian => BigEndian::write_u32(&mut buf, val),
-            Endian::LittleEndian => LittleEndian::write_u32(&mut buf, val),
-        };
-
+        BigEndian::write_u32(&mut buf, val);
         self.write_bytes(&buf);
     }
 
     /// Same as `write_u32()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     pub fn write_i32(&mut self, val: i32) {
         self.write_u32(val as u32);
     }
 
     /// Append a quaddruple word (64 bits value) to the buffer
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_u64(1) // buffer contains [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1] if little endian
     /// ```
     pub fn write_u64(&mut self, val: u64) {
         let mut buf = [0; 8];
-        match self.endian{
-            Endian::BigEndian => BigEndian::write_u64(&mut buf, val),
-            Endian::LittleEndian => LittleEndian::write_u64(&mut buf, val),
-        };
-
+        BigEndian::write_u64(&mut buf, val);
         self.write_bytes(&buf);
     }
 
     /// Same as `write_u64()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     pub fn write_i64(&mut self, val: i64) {
         self.write_u64(val as u64);
     }
 
     /// Append a 32 bits floating point number to the buffer.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_f32(0.1)
     /// ```
     pub fn write_f32(&mut self, val: f32) {
         let mut buf = [0; 4];
-        
-        match self.endian{
-            Endian::BigEndian => BigEndian::write_f32(&mut buf, val),
-            Endian::LittleEndian => LittleEndian::write_f32(&mut buf, val),
-        };
-
+        BigEndian::write_f32(&mut buf, val);
         self.write_bytes(&buf);
     }
 
     /// Append a 64 bits floating point number to the buffer.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_f64(0.1)
     /// ```
     pub fn write_f64(&mut self, val: f64) {
         let mut buf = [0; 8];
-
-        match self.endian{
-            Endian::BigEndian => BigEndian::write_f64(&mut buf, val),
-            Endian::LittleEndian => LittleEndian::write_f64(&mut buf, val),
-        };
+        BigEndian::write_f64(&mut buf, val);
         self.write_bytes(&buf);
     }
 
     /// Append a string to the buffer.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
     ///
     /// *Format* The format is `(u32)size + size * (u8)characters`
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_string("Hello")
     /// ```
-    pub fn write_string(&mut self, val: &str) {
+    pub fn write_str(&mut self, val: &str) {
         self.write_u32(val.len() as u32);
         self.write_bytes(val.as_bytes());
     }
 
-    // Read operations
-
-    /// Read a defined amount of raw bytes, or return an IO error if not enough bytes are
-    /// available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_bytes(&mut self, size: usize) -> Result<Vec<u8>> {
-        self.flush_bit();
-        if self.rpos + size > self.data.len() {
-            return Err(Error::new(ErrorKind::UnexpectedEof, "could not read enough bytes from buffer"))
-        }
-        let range = self.rpos..self.rpos + size;
-        let mut res = Vec::<u8>::new();
-        res.write_all(&self.data[range])?;
-        self.rpos += size;
-        Ok(res)
+    /// Write a single null-terminated string to the buffer.
+    /// 
+    /// #Example
+    ///
+    ///  ```
+    /// # use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
+    /// buffer.write_ntstr("Hello");
+    /// ```
+    pub fn write_ntstr(&mut self, val: &str) {
+        self.write_bytes(val.as_bytes());
+        self.write_u8(0);
     }
 
-    /// Read one byte, or return an IO error if not enough bytes are available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
+    /// Write a null-bookeneded string to the buffer.
+    /// 
+    /// #Example
+    /// ```
+    /// # use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
+    /// buffer.write_dntstr("Hello");
+    /// ```
+    pub fn write_dntstr(&mut self, val: &str){
+        self.write_u8(0);
+        self.write_bytes(val.as_bytes());
+        self.write_u8(0);
+    }
+
+    // Read operations
+
+    /// Read a defined amount of raw bytes. The program crash if not enough bytes are available
+    pub fn read_bytes(&mut self, size: usize) -> Vec<u8> {
+        self.flush_bit();
+        assert!(self.rpos + size <= self.data.len());
+        let range = self.rpos..self.rpos + size;
+        let mut res = Vec::<u8>::new();
+        res.write(&self.data[range]).unwrap();
+        self.rpos += size;
+        res
+    }
+
+    /// Read one byte. The program crash if not enough bytes are available
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::from_bytes(&vec![0x1]);
-    /// let value = buffer.read_u8().unwrap(); //Value contains 1
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::from_bytes(&vec![0x1]);
+    /// let value = buffer.read_u8(); //Value contains 1
     /// ```
-    pub fn read_u8(&mut self) -> Result<u8> {
+    pub fn read_u8(&mut self) -> u8 {
         self.flush_bit();
-        if self.rpos >= self.data.len() {
-            return Err(Error::new(ErrorKind::UnexpectedEof, "could not read enough bits from buffer"))
-        }
+        assert!(self.rpos < self.data.len());
         let pos = self.rpos;
         self.rpos += 1;
-        Ok(self.data[pos])
+        self.data[pos]
     }
 
     /// Same as `read_u8()` but for signed values
-    pub fn read_i8(&mut self) -> Result<i8> {
-        Ok(self.read_u8()? as i8)
+    pub fn read_i8(&mut self) -> i8 {
+        self.read_u8() as i8
     }
 
-    /// Read a 2-bytes long value, or return an IO error if not enough bytes are available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
+    /// Read a 2-bytes long value. The program crash if not enough bytes are available
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::from_bytes(&vec![0x0, 0x1]);
-    /// let value = buffer.read_u16().unwrap(); //Value contains 1
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::from_bytes(&vec![0x0, 0x1]);
+    /// let value = buffer.read_u16(); //Value contains 1
     /// ```
-    pub fn read_u16(&mut self) -> Result<u16> {
-        read_number!(self, read_u16, 2)
+    pub fn read_u16(&mut self) -> u16 {
+        self.flush_bit();
+        assert!(self.rpos + 2 <= self.data.len());
+        let range = self.rpos..self.rpos + 2;
+        self.rpos += 2;
+        BigEndian::read_u16(&self.data[range])
     }
 
     /// Same as `read_u16()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_i16(&mut self) -> Result<i16> {
-        Ok(self.read_u16()? as i16)
+    pub fn read_i16(&mut self) -> i16 {
+        self.read_u16() as i16
     }
 
-    /// Read a four-bytes long value, or return an IO error if not enough bytes are available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
+    /// Read a four-bytes long value. The program crash if not enough bytes are available
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::from_bytes(&vec![0x0, 0x0, 0x0, 0x1]);
-    /// let value = buffer.read_u32().unwrap(); // Value contains 1
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::from_bytes(&vec![0x0, 0x0, 0x0, 0x1]);
+    /// let value = buffer.read_u32(); // Value contains 1
     /// ```
-    pub fn read_u32(&mut self) -> Result<u32> {
-        read_number!(self, read_u32, 4)
+    pub fn read_u32(&mut self) -> u32 {
+        self.flush_bit();
+        assert!(self.rpos + 4 <= self.data.len());
+        let range = self.rpos..self.rpos + 4;
+        self.rpos += 4;
+        BigEndian::read_u32(&self.data[range])
     }
 
     /// Same as `read_u32()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_i32(&mut self) -> Result<i32> {
-        Ok(self.read_u32()? as i32)
+    pub fn read_i32(&mut self) -> i32 {
+        self.read_u32() as i32
     }
 
-    /// Read an eight bytes long value, or return an IO error if not enough bytes are available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
+    /// Read an eight bytes long value. The program crash if not enough bytes are available
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::from_bytes(&vec![0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1]);
-    /// let value = buffer.read_u64().unwrap(); //Value contains 1
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::from_bytes(&vec![0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1]);
+    /// let value = buffer.read_u64(); //Value contains 1
     /// ```
-    pub fn read_u64(&mut self) -> Result<u64> {
-        read_number!(self, read_u64, 8)
+    pub fn read_u64(&mut self) -> u64 {
+        self.flush_bit();
+        assert!(self.rpos + 8 <= self.data.len());
+        let range = self.rpos..self.rpos + 8;
+        self.rpos += 8;
+        BigEndian::read_u64(&self.data[range])
     }
 
     /// Same as `read_u64()` but for signed values
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_i64(&mut self) -> Result<i64> {
-        Ok(self.read_u64()? as i64)
+    pub fn read_i64(&mut self) -> i64 {
+        self.read_u64() as i64
     }
 
-    /// Read a 32 bits floating point value, or return an IO error if not enough bytes are available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_f32(&mut self) -> Result<f32> {
-        read_number!(self, read_f32, 4)
+    /// Read a 32 bits floating point value. The program crash if not enough bytes are available
+    pub fn read_f32(&mut self) -> f32 {
+        self.flush_bit();
+        assert!(self.rpos + 4 <= self.data.len());
+        let range = self.rpos..self.rpos + 4;
+        self.rpos += 4;
+        BigEndian::read_f32(&self.data[range])
     }
 
-    /// Read a 64 bits floating point value, or return an IO error if not enough bytes are available.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_f64(&mut self) -> Result<f64> {
-        read_number!(self, read_f64, 8)
+    /// Read a 64 bits floating point value. The program crash if not enough bytes are available
+    pub fn read_f64(&mut self) -> f64 {
+        self.flush_bit();
+        assert!(self.rpos + 8 <= self.data.len());
+        let range = self.rpos..self.rpos + 8;
+        self.rpos += 8;
+        BigEndian::read_f64(&self.data[range])
     }
 
     /// Read a string.
     ///
-    /// _Note_: First it reads a 32 bits value representing the size, then 'size' raw bytes
-    ///         that  must be encoded as UTF8.
-    /// _Note_: This method resets the read and write cursor for bitwise reading.
-    pub fn read_string(&mut self) -> Result<String> {
-        let size = self.read_u32()?;
-        match String::from_utf8(self.read_bytes(size as usize)?)
-        {
-            Ok(string_result) => Ok(string_result),
-            Err(e) => Err(Error::new(ErrorKind::InvalidData, e))
+    /// *Note* : First it reads a 32 bits value representing the size, the read 'size' raw bytes.
+    pub fn read_string(&mut self) -> String {
+        let size = self.read_u32();
+        String::from_utf8(self.read_bytes(size as usize)).unwrap()
+    }
+
+    /// Read a null-terminated string.
+    pub fn read_ntstr(&mut self) -> String {
+        let mut string = String::new();
+
+        let mut current = self.read_u8();
+        while current != 0 {
+            string.push(current as char);
+            current = self.read_u8();
         }
+
+        string
+    }
+
+    /// Read a null-bookended string.
+    pub fn read_dntstr(&mut self) -> String {
+        let mut string = String::new();
+
+        assert_eq!(0, self.read_u8());
+
+        let mut current = self.read_u8();
+        while current != 0 {
+            string.push(current as char);
+            current = self.read_u8();
+        }
+
+        string
     }
 
     // Other
@@ -433,7 +461,7 @@ impl ByteBuffer {
     }
 
     /// Set the reading cursor position.
-    /// _Note_: Sets the reading cursor to `min(newPosition, self.len())` to prevent overflow
+    /// *Note* : Set the reading cursor to `min(newPosition, self.len())` to prevent overflow
     pub fn set_rpos(&mut self, rpos: usize) {
         self.rpos = std::cmp::min(rpos, self.data.len());
     }
@@ -444,7 +472,7 @@ impl ByteBuffer {
     }
 
     /// Set the writing cursor position.
-    /// _Note_: Sets the writing cursor to `min(newPosition, self.len())` to prevent overflow
+    /// *Note* : Set the writing cursor to `min(newPosition, self.len())` to prevent overflow
     pub fn set_wpos(&mut self, wpos: usize) {
         self.wpos = std::cmp::min(wpos, self.data.len());
     }
@@ -458,57 +486,53 @@ impl ByteBuffer {
 
     /// Read 1 bit. Return true if the bit is set to 1, otherwhise, return false.
     ///
-    /// _Note_: Bits are read from left to right
+    /// **Note** Bits are read from left to right
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::from_bytes(&vec![128]); // 10000000b
-    /// let value1 = buffer.read_bit().unwrap(); //value1 contains true (eg: bit is 1)
-    /// let value2 = buffer.read_bit().unwrap(); //value2 contains false (eg: bit is 0)
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::from_bytes(&vec![128]); // 10000000b
+    /// let value1 = buffer.read_bit(); //value1 contains true (eg: bit is 1)
+    /// let value2 = buffer.read_bit(); //value2 contains false (eg: bit is 0)
     /// ```
-    pub fn read_bit(&mut self) -> Result<bool> {
-        if self.rpos >= self.data.len() {
-            return Err(Error::new(ErrorKind::UnexpectedEof, "could not read enough bits from buffer"))
-        }
-        let bit = self.data[self.rpos] & (1 << (7 - self.rbit)) != 0;
+    pub fn read_bit(&mut self) -> bool {
+        assert!(self.rpos <= self.data.len());
+        let bit = self.data[self.rpos] & (1 << 7 - self.rbit) != 0;
         self.rbit += 1;
         if self.rbit > 7 {
-            self.flush_rbit();
+            self.rbit = 0;
+            self.rpos += 1;
         }
-        Ok(bit)
+        bit
     }
 
     /// Read n bits. an return the corresponding value an u64.
     ///
-    /// _Note_: We cannot read more than 64 bits
+    /// **Note 1** : We cannot read more than 64 bits
     ///
-    /// _Note_: Bits are read from left to right
+    /// **Note 2** Bits are read from left to right
     ///
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::from_bytes(&vec![128]); // 10000000b
-    /// let value = buffer.read_bits(3).unwrap(); // value contains 4 (eg: 100b)
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::from_bytes(&vec![128]); // 10000000b
+    /// let value = buffer.read_bits(3); // value contains 4 (eg: 100b)
     /// ```
-    pub fn read_bits(&mut self, n: u8) -> Result<u64> {
-        if n > 64 {
-            return Err(Error::new(ErrorKind::InvalidInput, "cannot read more than 64 bits"));
-        }
-
-        if n == 0 {
-            Ok(0)
+    pub fn read_bits(&mut self, n: u8) -> u64 {
+        // TODO : Assert that n <= 64
+        if n > 0 {
+            ((if self.read_bit() { 1 } else { 0 }) << n - 1) | self.read_bits(n - 1)
         } else {
-            Ok(((if self.read_bit()? { 1 } else { 0 }) << (n - 1)) | self.read_bits(n - 1)?)
+            0
         }
     }
 
-    /// Discard all the pending bits available for reading or writing and place the corresponding cursor to the next byte.
+    /// Discard all the pending bits available for reading or writing and place the the corresponding cursor to the next byte.
     ///
-    /// _Note_: If no bits are currently read or written, this function does nothing.
-    ///
+    /// **Note 1** : If no bits are currently read or written, this function does nothing.
+    /// **Note 2** : This function is automatically called for each write or read operations.
     /// #Example
     ///
     /// ```text
@@ -521,25 +545,18 @@ impl ByteBuffer {
     /// ```
     pub fn flush_bit(&mut self) {
         if self.rbit > 0 {
-            self.flush_rbit();
+            self.rpos += 1;
+            self.rbit = 0
         }
+
         if self.wbit > 0 {
-            self.flush_wbit();
+            self.wpos += 1;
+            self.wbit = 0
         }
-    }
-
-    fn flush_rbit(&mut self) {
-        self.rpos += 1;
-        self.rbit = 0
-    }
-
-    fn flush_wbit(&mut self) {
-        self.wpos += 1;
-        self.wbit = 0
     }
 
     /// Append 1 bit value to the buffer.
-    /// The bit is appended like this :
+    /// The bit is happened like this :
     ///
     /// ```text
     /// ...| XXXXXXXX | 10000000 |....
@@ -567,13 +584,13 @@ impl ByteBuffer {
     /// #Example
     ///
     /// ```
-    /// #  use bytebuffer::*;
-    /// let mut buffer = ByteBuffer::new();
+    /// #  use databuffer::*;
+    /// let mut buffer = DataBuffer::new();
     /// buffer.write_bits(4, 3); // append 100b
     /// ```
     pub fn write_bits(&mut self, value: u64, n: u8) {
         if n > 0 {
-            self.write_bit((value >> (n - 1)) & 1 != 0);
+            self.write_bit((value >> n - 1) & 1 != 0);
             self.write_bits(value, n - 1);
         } else {
             self.write_bit((value & 1) != 0);
@@ -581,7 +598,7 @@ impl ByteBuffer {
     }
 }
 
-impl Read for ByteBuffer {
+impl Read for DataBuffer {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.flush_bit();
         let read_len = std::cmp::min(self.data.len() - self.rpos, buf.len());
@@ -594,7 +611,7 @@ impl Read for ByteBuffer {
     }
 }
 
-impl Write for ByteBuffer {
+impl Write for DataBuffer {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.write_bytes(buf);
         Ok(buf.len())
@@ -605,7 +622,7 @@ impl Write for ByteBuffer {
     }
 }
 
-impl std::fmt::Debug for ByteBuffer {
+impl std::fmt::Debug for DataBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let rpos = if self.rbit > 0 {
             self.rpos + 1
@@ -620,7 +637,7 @@ impl std::fmt::Debug for ByteBuffer {
             remaining_data[i] = *val;
         }
 
-        write!(f, "ByteBuffer {{ remaining_data: {:?}, total_data: {:?}, endian: {:?} }}",
-               remaining_data, self.data, self.endian)
+        write!(f, "DataBuffer {{ remaining_data: {:?}, total_data: {:?} }}",
+               remaining_data, self.data)
     }
 }
