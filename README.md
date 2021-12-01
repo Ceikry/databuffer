@@ -1,6 +1,5 @@
-[![Build Status](https://travis-ci.org/terahlunah/bytebuffer-rs.svg?branch=master)](https://travis-ci.org/terahlunah/bytebuffer-rs)
-[![Crates.io](https://img.shields.io/crates/v/bytebuffer-rs.svg)](https://crates.io/crates/bytebuffer-rs)
-[![Documentation](https://docs.rs/bytebuffer-rs/badge.svg)](https://docs.rs/bytebuffer-rs)
+[![Crates.io](https://img.shields.io/crates/v/databuffer.svg)](https://crates.io/crates/databuffer)
+[![Documentation](https://docs.rs/databuffer/badge.svg)](https://docs.rs/databuffer)
 
 ## License
 
