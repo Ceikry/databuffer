@@ -5,7 +5,7 @@ authors = ["Terah <terah.dev@gmail.com>", "Shiroy <awacheux.utc@gmail.com>", "Ce
 description = "A feature rich binary buffer for use with networking and binary protocols."
 homepage = "https://github.com/ceikry/databuffer"
 repository = "https://github.com/ceikry/databuffer"
-keywords = ["byte", "buffer", "network", "protocol", "bytebuffer", "databuffer"]
+keywords = ["byte", "buffer", "network", "protocol", "databuffer"]
 license = "MIT OR Apache-2.0"
 
 [lib]
