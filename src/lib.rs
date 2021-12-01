@@ -1,10 +1,10 @@
+
+/// THIS FILE HAS BEEN MODIFIED HEAVILY BY Ceikry IN ORDER TO ACCOMODATE ADDITIONAL FEATURES, AND SEPARATE NAMING BASED ON PERSONAL PREFERENCE.
+/// Much love to the original authors who provided the groundwork <3 (Such authors are mentioned in the attributions in cargo.toml)
 extern crate byteorder;
 
 use byteorder::{ByteOrder, BigEndian};
 use std::{io::{Read, Write, Result}, convert::TryInto};
-
-/// THIS FILE HAS BEEN MODIFIED HEAVILY BY Ceikry IN ORDER TO ACCOMODATE ADDITIONAL FEATURES, AND SEPARATE NAMING BASED ON PERSONAL PREFERENCE.
-/// Much love to the original authors who provided the groundwork <3 (Such authors are mentioned in the attributions in cargo.toml)
 
 /// A data buffer object specifically turned to easily read and write binary values
 pub struct DataBuffer {
