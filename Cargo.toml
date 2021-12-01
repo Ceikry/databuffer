@@ -1,6 +1,6 @@
 [package]
 name = "databuffer"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Terah <terah.dev@gmail.com>", "Shiroy <awacheux.utc@gmail.com>", "Ceikry <ironceikry@gmail.com>"]
 description = "A feature rich binary buffer for use with networking and binary protocols."
 homepage = "https://github.com/ceikry/databuffer"
