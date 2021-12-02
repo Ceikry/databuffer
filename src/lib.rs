@@ -3,7 +3,7 @@
 /// Much love to the original authors who provided the groundwork <3 (Such authors are mentioned in the attributions in cargo.toml)
 extern crate byteorder;
 
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, BigEndian, LittleEndian};
 use std::{io::{Read, Write, Result}, convert::TryInto};
 
 /// A data buffer object specifically turned to easily read and write binary values
@@ -288,6 +288,73 @@ impl DataBuffer {
         self.write_u8(0);
     }
 
+    /// Writes a smart to the buffer, which is a dynamically-sized unit with a max value of 32768.
+    fn write_smart(&mut self, val: u16){
+        if val > 128 {
+            self.write_u16(val + 32768);
+        } else {
+            self.write_u8(val as u8);
+        }
+    }
+
+    /// Writes a medium to the buffer, which is a tribyte word.
+    fn write_medium(&mut self, val: u32) {
+        self.write_i8((val >> 16) as i8);
+        self.write_i8(((val >> 8) & 0xFF) as i8);
+        self.write_i8((val & 0xFF) as i8);
+    }
+
+    /// Writes an inverted-signededness i8 to the buffer.
+    fn write_u8_neg(&mut self, val: u8) {
+        self.write_i8(-(val as i8));    
+    }
+
+    /// Writes a u8 + 128 to the buffer.
+    fn write_u8_add(&mut self, val: u8) {
+        self.write_i8(((val + 128) & 0xFF) as i8);
+    }
+
+    /// Writes a u8 - 128 to the buffer.
+    fn write_u8_sub(&mut self, val: u8) {
+        self.write_i8((val - 128) as i8);
+    }
+
+    /// Writes a little-endian u16 to the buffer.
+    fn write_u16_le(&mut self, val: u16) {
+        self.write_i8(val as i8);
+        self.write_i8((val >> 8) as i8);
+    }
+
+    /// Writes a little-endian u16 + 128 to the buffer.
+    fn write_u16_le_add(&mut self, val: u16) {
+        self.write_i8((val + 128) as i8);
+        self.write_i8((val >> 8) as i8);
+    }
+
+    /// Writes a little-endian u32 to the buffer.
+    fn write_u32_le(&mut self, val: u32){
+        self.write_u8(val as u8);
+        self.write_u8((val >> 8) as u8);
+        self.write_u8((val >> 16) as u8);
+        self.write_u8((val >> 24) as u8);
+    }
+
+    /// Writes a mixed-endian u32 to the buffer.
+    fn write_u32_me(&mut self, val: u32){
+        self.write_u8((val >> 16) as u8);
+        self.write_u8((val >> 24) as u8);
+        self.write_u8(val as u8);
+        self.write_u8((val >> 8) as u8);
+    }
+
+    /// Writes a reverse mixed-endian u32 to the buffer.
+    fn write_u32_me_reversed(&mut self, val: u32){
+        self.write_u8((val >> 8) as u8);
+        self.write_u8(val as u8);
+        self.write_u8((val >> 24) as u8);
+        self.write_u8((val >> 16) as u8);
+    }
+
     // Read operations
 
     /// Read a defined amount of raw bytes. The program crash if not enough bytes are available
@@ -442,6 +509,71 @@ impl DataBuffer {
 
         string
     }
+
+        /// Reads a smart from the buffer, which is a dynamically-sized unit with a max value of 32768.
+        fn read_smart(&mut self) -> u16 {
+            if self.data[self.rpos] >= 128 {
+                return self.read_u16() - 32768;
+            }
+            else {
+                return self.read_u8() as u16;
+            }
+        }
+    
+        /// Reads a medium from the buffer, which is a tribyte word.
+        fn read_medium(&mut self) -> u32 {
+            return ((self.read_u8() as u32) << 16) + ((self.read_u8() as u32) << 8) + (self.read_u8() as u32);
+        }
+    
+        /// Reads an inverted-signededness u8 from the buffer.
+        fn read_u8_neg(&mut self) -> u8 {
+            return -self.read_i8() as u8;   
+        }
+
+        /// Reads an inverted-signededness i8 from the buffer.
+        fn read_i8_neg(&mut self) -> i8 {
+            return -self.read_i8();
+        }
+    
+        /// Reads a u8 + 128 from the buffer, and subtracts the extra 128.
+        fn read_u8_add(&mut self) -> u8 {
+            return self.read_u8() - 128;
+        }
+
+        /// Reads a i8 + 128 from the buffer, and subtracts the extra 128.
+        fn read_i8_add(&mut self) -> i8 {
+            return (self.read_u8() - 128) as i8;
+        }
+    
+        /// Reads a u8 - 128 from the buffer, and adds back the missing 128.
+        fn read_u8_sub(&mut self) -> u8 {
+            return (self.read_u8() + 128) as u8;
+        }
+    
+        /// Reads a little-endian u16 from the buffer.
+        fn read_u16_le(&mut self) -> u16 {
+            return (self.read_u8() as u16) + ((self.read_u8() as u16) << 8);
+        }
+    
+        /// Reads a little-endian u16 + 128 from the buffer, and subtracts the extra 128.
+        fn read_u16_le_add(&mut self) -> u16 {
+            return ((self.read_u8() - 128) as u16) + ((self.read_u8() as u16) << 8);
+        }
+    
+        /// Reads a little-endian u32 from the buffer.
+        fn read_u32_le(&mut self) -> u32 {
+            return (self.read_u8() as u32) + ((self.read_u8() as u32) << 8) + ((self.read_u8() as u32) << 16) + ((self.read_u8() as u32) << 24);
+        }
+    
+        /// Reads a mixed-endian u32 from the buffer.
+        fn read_u32_me(&mut self) -> u32 {
+            return ((self.read_u8() as u32) << 16) + ((self.read_u8() as u32) << 24) + ((self.read_u8() as u32)) + ((self.read_u8() as u32) << 8);
+        }
+    
+        /// Reads a reverse mixed-endian u32 from the buffer.
+        fn read_u32_me_reversed(&mut self) -> u32 {
+            return ((self.read_u8() as u32) << 8) + (self.read_u8() as u32) + ((self.read_u8() as u32) << 24) + ((self.read_u8() as u32) << 16);
+        }
 
     // Other
 
