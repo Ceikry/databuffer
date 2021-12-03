@@ -291,7 +291,7 @@ impl DataBuffer {
     /// Writes a smart to the buffer, which is a dynamically-sized unit with a max value of 32768.
     pub fn write_smart(&mut self, val: u16){
         if val > 128 {
-            self.write_u16(val + 32768);
+            self.write_u16(val.wrapping_add(32768));
         } else {
             self.write_u8(val as u8);
         }
@@ -311,12 +311,12 @@ impl DataBuffer {
 
     /// Writes a u8 + 128 to the buffer.
     pub fn write_u8_add(&mut self, val: u8) {
-        self.write_i8(((val + 128) & 0xFF) as i8);
+        self.write_i8(val.wrapping_add(128) as i8);
     }
 
     /// Writes a u8 - 128 to the buffer.
     pub fn write_u8_sub(&mut self, val: u8) {
-        self.write_i8((val - 128) as i8);
+        self.write_i8(val.wrapping_sub(128) as i8);
     }
 
     /// Writes a little-endian u16 to the buffer.
@@ -327,7 +327,7 @@ impl DataBuffer {
 
     /// Writes a little-endian u16 + 128 to the buffer.
     pub fn write_u16_le_add(&mut self, val: u16) {
-        self.write_i8((val + 128) as i8);
+        self.write_i8(val.wrapping_add(128) as i8);
         self.write_i8((val >> 8) as i8);
     }
 
@@ -513,7 +513,7 @@ impl DataBuffer {
     /// Reads a smart from the buffer, which is a dynamically-sized unit with a max value of 32768.
     pub fn read_smart(&mut self) -> u16 {
         if self.data[self.rpos] >= 128 {
-            return self.read_u16() - 32768;
+            return self.read_u16().wrapping_sub(32768);
         }
         else {
             return self.read_u8() as u16;
@@ -537,17 +537,17 @@ impl DataBuffer {
 
     /// Reads a u8 + 128 from the buffer, and subtracts the extra 128.
     pub fn read_u8_add(&mut self) -> u8 {
-        return self.read_u8() - 128;
+        return self.read_u8().wrapping_sub(128);
     }
 
     /// Reads a i8 + 128 from the buffer, and subtracts the extra 128.
     pub fn read_i8_add(&mut self) -> i8 {
-        return (self.read_u8() - 128) as i8;
+        return self.read_u8().wrapping_sub(128) as i8;
     }
 
     /// Reads a u8 - 128 from the buffer, and adds back the missing 128.
     pub fn read_u8_sub(&mut self) -> u8 {
-        return (self.read_u8() + 128) as u8;
+        return self.read_u8().wrapping_add(128) as u8;
     }
 
     /// Reads a little-endian u16 from the buffer.
@@ -557,7 +557,7 @@ impl DataBuffer {
 
     /// Reads a little-endian u16 + 128 from the buffer, and subtracts the extra 128.
     pub fn read_u16_le_add(&mut self) -> u16 {
-        return ((self.read_u8() - 128) as u16) + ((self.read_u8() as u16) << 8);
+        return (self.read_u8().wrapping_sub(128) as u16) + ((self.read_u8() as u16) << 8);
     }
 
     /// Reads a little-endian u32 from the buffer.
