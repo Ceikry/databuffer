@@ -250,3 +250,119 @@ fn test_no_packet_header() {
     assert_eq!(bytes[1], 255);
     assert_eq!(bytes[2], 255);
 }
+
+#[test]
+fn test_smart() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_smart(32);
+    buffer.write_smart(32764);
+
+    assert_eq!(buffer.read_smart(), 32);
+    assert_eq!(buffer.read_smart(), 32764);
+}
+
+#[test]
+fn test_medium() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_medium(48132);
+
+    assert_eq!(buffer.read_medium(), 48132);
+}
+
+#[test]
+fn test_u8_neg() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_u8_neg(255);
+
+    assert_eq!(buffer.read_u8_neg(), 255);
+}
+
+#[test]
+fn test_i8_neg() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_i8_neg(-128);
+    buffer.write_i8_neg(127);
+
+    assert_eq!(buffer.read_i8_neg(), -128);
+    assert_eq!(buffer.read_i8_neg(), 127);
+}
+
+#[test]
+fn test_u8_add() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_u8_add(255);
+
+    assert_eq!(buffer.read_u8_add(), 255);
+}
+
+#[test]
+fn test_i8_add() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_i8_add(-128);
+
+    assert_eq!(buffer.read_i8_add(), -128);
+}
+
+#[test]
+fn test_u8_sub() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_u8_sub(255);
+
+    assert_eq!(buffer.read_u8_sub(), 255);
+}
+
+#[test]
+fn test_i8_sub() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_i8_sub(-56);
+
+    assert_eq!(buffer.read_i8_sub(), -56);
+}
+
+#[test]
+fn test_u16_le() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_u16_le(65535);
+
+    assert_eq!(buffer.read_u16_le(), 65535);
+}
+
+#[test]
+fn test_i16_le() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_i16_le(-32768);
+
+    assert_eq!(buffer.read_i16_le(), -32768);
+}
+
+#[test]
+fn test_u16_le_add(){
+    let mut buffer = DataBuffer::new();
+    buffer.write_u16_le_add(65535);
+
+    assert_eq!(buffer.read_u16_le_add(), 65535);
+}
+
+#[test]
+fn test_i16_le_add() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_i16_le_add(-32768);
+
+    assert_eq!(buffer.read_i16_le_add(), -32768);
+}
+
+#[test]
+fn test_u32_le() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_u32_le(4294967295);
+
+    assert_eq!(buffer.read_u32_le(), 4294967295);
+}
+
+#[test]
+fn test_i32_le() {
+    let mut buffer = DataBuffer::new();
+    buffer.write_i32_le(-2147483648);
+
+    assert_eq!(buffer.read_i32_le(), -2147483648);
+}
