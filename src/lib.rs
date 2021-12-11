@@ -35,11 +35,23 @@ impl DataBuffer {
         }
     }
 
-    /// Construct a new DataBuffer filled with the data array.
+    /// Borrows the data from a [`Vec<u8>`] to produce a [`DataBuffer`]. 
+    /// This method is the equivalent of creating a new() [`DataBuffer`]
+    /// and calling the .write_bytes() method to effectively
+    /// copy all bytes from the borrowed vector into this buffer's underlying
+    /// vector.
     pub fn from_bytes(bytes: &[u8]) -> DataBuffer {
         let mut buffer = DataBuffer::new();
         buffer.write_bytes(bytes);
         buffer
+    }
+
+    /// Takes ownership of a [`Vec<u8>`] and uses it for this buffer's
+    /// underlying vector. This is not a borrow, you will not be able to use
+    /// the original vector anymore after calling this method.
+    /// This method is useful to avoid excessive copying of data.
+    pub fn with_vec(bytes: Vec<u8>) -> DataBuffer {
+        DataBuffer { data: bytes, wpos: 0, rpos: 0, rbit: 0, wbit: 0, header: PacketHeader::NORMAL }
     }
 
     pub fn create(opcode: u8, header: PacketHeader) -> DataBuffer {
