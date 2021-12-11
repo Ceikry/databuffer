@@ -1,5 +1,7 @@
 [![Crates.io](https://img.shields.io/crates/v/databuffer.svg)](https://crates.io/crates/databuffer)
 [![Documentation](https://docs.rs/databuffer/badge.svg)](https://docs.rs/databuffer)
+[![Discord Chat](https://img.shields.io/discord/918184459315056683.svg)](https://discord.gg/pMnw9H2Art)  
+
 
 ## License
 
