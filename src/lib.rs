@@ -690,9 +690,15 @@ impl DataBuffer {
         self.wpos = std::cmp::min(wpos, self.data.len());
     }
 
-    /// Return the raw byte buffer.
+    /// Returns a copy of this buffer's underlying [`Vec<u8>`].
+    /// If you no longer need to use this buffer after calling this,
+    /// it is recommended to use .deconstruct() instead.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.data.to_vec()
+    }
+
+    pub fn deconstruct(self) -> Vec<u8> {
+        self.data
     }
 
     //Bit manipulation functions

@@ -366,3 +366,25 @@ fn test_i32_le() {
 
     assert_eq!(buffer.read_i32_le(), -2147483648);
 }
+
+#[test]
+fn test_with_vec() {
+    let vec = vec![1,2,3,4,5,6,7];
+
+    let mut buffer = DataBuffer::with_vec(vec);
+
+    assert_eq!(buffer.read_u8(), 1);
+}
+
+#[test]
+fn test_deconstruct() {
+    let vec = vec![1,2,3,4,5,6,7];
+
+    let mut buffer = DataBuffer::with_vec(vec);
+
+    buffer.write_u8(3);
+
+    let vec = buffer.deconstruct();
+
+    assert_eq!(format!("{:?}", vec), "[3, 2, 3, 4, 5, 6, 7]")
+}
